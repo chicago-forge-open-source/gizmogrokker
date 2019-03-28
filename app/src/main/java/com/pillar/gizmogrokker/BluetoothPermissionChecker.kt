@@ -20,6 +20,7 @@ class BluetoothPermissionChecker(
     }
 
     private fun hasAccessFineLocation() =
-        permissionProxy.hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+        permissionProxy.hasPermission(Manifest.permission.ACCESS_FINE_LOCATION) &&
+        permissionProxy.hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
 }
 

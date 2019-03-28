@@ -1,6 +1,7 @@
 package com.pillar.gizmogrokker
 
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -16,18 +17,24 @@ abstract class BluetoothInterface {
     abstract val context: Context
     private var enabledCallback: EnabledCallback? = null
     private var discoveryEndedCallback: DiscoveryEndedCallback? = null
+    private var deviceDiscoveredCallback: DeviceCallback? = null
 
     val hasBluetoothSupport: Boolean get() = adapter != null
     open val isEnabled: Boolean get() = adapter?.isEnabled ?: false
 
     private val broadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
+            println(intent.action)
             when (intent.action) {
                 BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> unregisterReceiver(context)
-                    .also {
-                        discoveryEndedCallback?.invoke()
-                    }
+                    .also { discoveryEndedCallback?.invoke() }
                 BluetoothAdapter.ACTION_STATE_CHANGED -> enabledCallback?.invoke()
+                BluetoothDevice.ACTION_FOUND -> {
+                    val btDevice : BluetoothDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                    println("The Device $btDevice")
+                    val device = BloothDevice(name = btDevice.name, macAddress = btDevice.address)
+                    deviceDiscoveredCallback?.invoke(device)
+                }
             }
         }
     }
@@ -58,6 +65,8 @@ abstract class BluetoothInterface {
     }
 
     open fun registerDeviceDiscovered(callback: DeviceCallback) {
+        println("register device discovered callback")
+        this.deviceDiscoveredCallback = callback
     }
 
     open fun registerDiscoveryEnded(callback: DiscoveryEndedCallback) {

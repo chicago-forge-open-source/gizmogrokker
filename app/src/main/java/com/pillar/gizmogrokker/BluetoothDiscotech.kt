@@ -16,7 +16,10 @@ class BluetoothDiscotech(val bluetoothInterface: BluetoothInterface) {
 
     private suspend fun collectDevices() = mutableListOf<BloothDevice>()
         .also { devices ->
-            bluetoothInterface.registerDeviceDiscovered { devices += it }
+            bluetoothInterface.registerDeviceDiscovered {
+                println("device discovered")
+                devices += it
+            }
             waitForDiscoveryToFinish()
         }
 

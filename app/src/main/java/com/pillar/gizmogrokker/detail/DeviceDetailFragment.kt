@@ -75,10 +75,10 @@ class Callback : BluetoothGattCallback() {
         val batteryLevelUUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
 
         gatt?.services?.flatMap { it.characteristics }?.forEach {
-            
-//            if(it.uuid.equals(batteryLevelUUID) || it.uuid.equals(batteryServiceUUID)) {
-//                gatt.readCharacteristic(it)
-//            }
+
+            if(it.uuid == batteryLevelUUID || it.uuid == batteryServiceUUID) {
+                gatt.readCharacteristic(it)
+            }
         }
 
 //        val char1 = BluetoothGattCharacteristic(batteryServiceUUID, 1, 1)

@@ -12,10 +12,9 @@ import androidx.core.app.ActivityCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProviders
 import com.pillar.gizmogrokker.*
-import com.pillar.gizmogrokker.GrokkerBluetoothState.*
 import com.pillar.gizmogrokker.detail.DeviceDetailActivity
-import kotlinx.android.synthetic.main.device_list_activity.*
 import kotlinx.android.synthetic.main.device_fragment.view.*
+import kotlinx.android.synthetic.main.device_list_activity.*
 import kotlinx.coroutines.*
 
 const val REQUEST_BLUETOOTH_PERMISSIONS = 1
@@ -26,6 +25,24 @@ class DeviceListActivity : AppCompatActivity() {
         private val permissions = arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION
         )
+    }
+
+    private val commandDispatcher by lazy {
+        object : FindBloothDevicesCommandDispatcher {
+
+            private val bluetoothInterface = object : BluetoothInterface {
+                override val bluetoothEnabled = DataEvent<Unit>()
+                override val discoveryEnded = DataEvent<Unit>()
+                override val deviceDiscovered = DataEvent<BloothDevice>()
+                override val context: Context get() = applicationContext
+                override val adapter = BluetoothAdapter.getDefaultAdapter()
+            }
+
+            override val bluetoothDiscotech: BluetoothDiscotech =
+                BluetoothDiscotech(bluetoothInterface)
+            override val checker: BluetoothPermissionChecker =
+                BluetoothPermissionChecker(bluetoothInterface, PermissionProxy(applicationContext))
+        }
     }
 
     private lateinit var job: Job
@@ -46,29 +63,40 @@ class DeviceListActivity : AppCompatActivity() {
     private fun updateViewState() {
         deviceListFragment.deviceList = viewModel.deviceList
         findDevices.apply {
-            isEnabled = viewModel.buttonEnabled
-            text = viewModel.buttonText
+            isEnabled = viewModel.buttonEnabled && !viewModel.isScanning
+            text = if (viewModel.isScanning) "Scanning" else viewModel.buttonText
         }
     }
 
     private val deviceListFragment get() = fragment as DeviceListFragment
 
     fun View.onFindBloothDevicesClick() {
-        ioScope.launch {
-            bluetoothInterface.checkBluetoothState()
-                .run {
-                    when (this) {
-                        Ready -> viewModel.deviceList = bluetoothInterface.discoverize()
-                        MustRequest -> requestPermissions()
-                        NoBlooth -> viewModel.run {
-                            buttonEnabled = false
-                            buttonText = getString(R.string.NoBloothText)
-                        }
-                    }
-                }
+        viewModel.isScanning = true
+        updateViewState()
 
-            performUiUpdate { updateViewState() }
+        ioScope.launch {
+            FindBloothDevicesCommand()
+                .perform()
+                .showResultsInUI()
         }
+    }
+
+    private suspend fun FindBloothDevicesCommand.perform() = with(commandDispatcher) { perform() }
+
+    private suspend fun FindBloothDevicesCommand.Result.showResultsInUI() {
+        when (this) {
+            is FindBloothDevicesCommand.Result.FoundDevices -> viewModel.run {
+                deviceList = foundDeviceList
+                isScanning = false
+            }
+            FindBloothDevicesCommand.Result.MustRequest -> requestPermissions()
+            FindBloothDevicesCommand.Result.NoBlooth -> viewModel.run {
+                buttonEnabled = false
+                buttonText = getString(R.string.NoBloothText)
+            }
+        }
+
+        performUiUpdate { updateViewState() }
     }
 
     private suspend fun performUiUpdate(block: suspend CoroutineScope.() -> Unit) {
@@ -94,35 +122,14 @@ class DeviceListActivity : AppCompatActivity() {
                     PackageManager.PERMISSION_GRANTED -> permissionGranted()
                     else -> println("grant results ${grantResults[0]}")
                 }
-
             }
         }
     }
 
     private fun permissionGranted() = ioScope.launch {
-        viewModel.deviceList = bluetoothInterface.discoverize()
-        performUiUpdate { updateViewState() }
+        FindBloothDevicesCommand().perform()
+            .showResultsInUI()
     }
-
-    private suspend fun BluetoothInterface.discoverize() = BluetoothDiscotech(
-        this
-    )
-        .also { println("Starting Discovery") }
-        .discoverize()
-        .also { println("Discovery complete, $it") }
-
-    private val bluetoothInterface by lazy {
-        object : BluetoothInterface() {
-            override val context: Context get() = applicationContext
-            override val adapter = BluetoothAdapter.getDefaultAdapter()
-        }
-    }
-
-    private fun BluetoothInterface.checkBluetoothState() = BluetoothPermissionChecker(
-        this,
-        PermissionProxy(applicationContext)
-    )
-        .checkBluetoothState()
 
     fun View.onShowDeviceDetailClick() {
         val intent = Intent(context, DeviceDetailActivity::class.java)
@@ -140,5 +147,6 @@ class DeviceListActivity : AppCompatActivity() {
 class DeviceListViewModel(
     var deviceList: List<BloothDevice> = emptyList(),
     var buttonText: String = "Find Blooth Devices!",
-    var buttonEnabled: Boolean = true
+    var buttonEnabled: Boolean = true,
+    var isScanning: Boolean = false
 ) : ViewModel()

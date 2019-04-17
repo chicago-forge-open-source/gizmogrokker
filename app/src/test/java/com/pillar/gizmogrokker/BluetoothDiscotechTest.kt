@@ -91,7 +91,9 @@ class BluetoothDiscotechTest {
 class FakeBluetoothInterface(
     override val isEnabled: Boolean = false,
     val autoFinishDiscovery: Boolean = true
-) : BluetoothInterface() {
+) : BluetoothInterface {
+    override val bluetoothEnabled = DataEvent<Unit>()
+    override val deviceDiscovered = DataEvent<BloothDevice>()
     override val adapter: BluetoothAdapter get() = throw NotImplementedError("Will not implement.")
     override val context: Context get() = throw NotImplementedError("Will not implement.")
     override val discoveryEnded = AutoFinishEvent(autoFinishDiscovery = autoFinishDiscovery)

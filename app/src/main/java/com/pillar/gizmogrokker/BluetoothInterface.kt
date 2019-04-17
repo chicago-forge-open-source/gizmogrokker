@@ -12,22 +12,22 @@ import com.pillar.gizmogrokker.bluetoothclasses.BluetoothServiceClass
 
 typealias DiscoveryEndedCallback = (Unit) -> Unit
 
-abstract class BluetoothInterface {
+interface BluetoothInterface {
 
-    abstract val adapter: BluetoothAdapter?
-    abstract val context: Context
-    val bluetoothEnabled: Event<Unit> = DataEvent()
-    open val discoveryEnded: Event<Unit> = DataEvent()
-    open val deviceDiscovered: Event<BloothDevice> = DataEvent()
+    val adapter: BluetoothAdapter?
+    val context: Context
+    val bluetoothEnabled: Event<Unit>
+    val discoveryEnded: Event<Unit>
+    val deviceDiscovered: Event<BloothDevice>
 
     val hasBluetoothSupport: Boolean get() = adapter != null
-    open val isEnabled: Boolean get() = adapter?.isEnabled ?: false
+    val isEnabled: Boolean get() = adapter?.isEnabled ?: false
 
-    open fun enable() {
+    fun enable() {
         adapter?.enable()
     }
 
-    open fun startDiscovery() {
+    fun startDiscovery() {
         if (adapter?.isDiscovering == true) {
             adapter?.cancelDiscovery()
         }
@@ -35,43 +35,48 @@ abstract class BluetoothInterface {
         adapter?.startDiscovery()
 
         context.registerReceiver(
-            Receiver(bluetoothEnabled, discoveryEnded, deviceDiscovered),
-            IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
-                .apply {
-                    addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
-                    addAction(BluetoothDevice.ACTION_FOUND)
-                }
+            Receiver(
+                bluetoothEnabled,
+                discoveryEnded,
+                deviceDiscovered
+            ),
+            Receiver.intentFilter()
         )
     }
+}
+
+private class Receiver(
+    private val bluetoothEnabled: Event<Unit>,
+    private val discoveryEnded: Event<Unit>,
+    private val deviceDiscovered: Event<BloothDevice>
+) : BroadcastReceiver() {
 
     companion object {
-        private class Receiver(
-            private val bluetoothEnabled: Event<Unit>,
-            private val discoveryEnded: Event<Unit>,
-            private val deviceDiscovered: Event<BloothDevice>
-        ) : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                when (intent.action) {
-                    BluetoothAdapter.ACTION_STATE_CHANGED -> handleStateChanged()
-                    BluetoothDevice.ACTION_FOUND -> intent.handleFound()
-                    BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> context.handleDiscoveryFinished()
-                }
-            }
+        fun intentFilter() = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+            .apply { addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED) }
+            .apply { addAction(BluetoothDevice.ACTION_FOUND) }
+    }
 
-            private fun Context.handleDiscoveryFinished() {
-                unregisterReceiver(this)
-                    .also { discoveryEnded.eventOccurred(Unit) }
-            }
+    override fun onReceive(context: Context, intent: Intent) {
+        when (intent.action) {
+            BluetoothAdapter.ACTION_STATE_CHANGED -> handleStateChanged()
+            BluetoothDevice.ACTION_FOUND -> intent.handleFound()
+            BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> context.handleDiscoveryFinished()
+        }
+    }
 
-            private fun handleStateChanged() {
-                bluetoothEnabled.eventOccurred(Unit)
-            }
+    private fun Context.handleDiscoveryFinished() = unregisterReceiver(this@Receiver)
+        .also { discoveryEnded.eventOccurred(Unit) }
 
-            private fun Intent.handleFound() {
-                bluetoothDevice()
-                    .bloothDevice()
-                    .let { deviceDiscovered.eventOccurred(it) }
-            }
+    private fun handleStateChanged() {
+        bluetoothEnabled.eventOccurred(Unit)
+    }
+
+    private fun Intent.handleFound() {
+        bluetoothDevice()
+            .bloothDevice()
+            .let { deviceDiscovered.eventOccurred(it) }
+    }
 
             private fun BluetoothDevice.bloothDevice() = BloothDevice(
                 name = name,
@@ -82,14 +87,9 @@ abstract class BluetoothInterface {
                 services = BluetoothServiceClass.getAvailableServices(bluetoothClass)
             )
 
-            private fun Intent.bluetoothDevice(): BluetoothDevice =
-                getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+    private fun Intent.bluetoothDevice(): BluetoothDevice =
+        getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
 
-            private fun unregisterReceiver(context: Context) {
-                context.unregisterReceiver(this)
-            }
-        }
-    }
 }
 
 typealias Listener<P> = (P) -> Unit

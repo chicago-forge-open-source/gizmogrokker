@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat;
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -66,5 +68,15 @@ dependencies {
         exclude(group = "com.android.support")
         exclude(group = "org.jetbrains.kotlin")
         exclude(group = "androidx.test.espresso")
+    }
+}
+
+tasks {
+    withType<Test> {
+        testLogging {
+            exceptionFormat = TestExceptionFormat.FULL
+            showStandardStreams = true
+            events("passed", "failed", "skipped")
+        }
     }
 }

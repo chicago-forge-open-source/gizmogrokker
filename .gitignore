@@ -30,6 +30,10 @@ proguard/
 # Android Studio Navigation editor temp files
 .navigation/
 
+# Floobits
+.floo
+.flooignore
+
 # Android Studio captures folder
 captures/
 

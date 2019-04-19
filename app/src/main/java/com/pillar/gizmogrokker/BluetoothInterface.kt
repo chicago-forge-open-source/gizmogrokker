@@ -23,6 +23,7 @@ interface BluetoothInterface {
     val hasBluetoothSupport: Boolean get() = adapter != null
     val isEnabled: Boolean get() = adapter?.isEnabled ?: false
 
+
     fun enable() {
         adapter?.enable()
     }
@@ -30,8 +31,8 @@ interface BluetoothInterface {
     fun startDiscovery() {
         if (adapter?.isDiscovering == true) {
             adapter?.cancelDiscovery()
-
         }
+
         adapter?.startDiscovery()
 
         context.registerReceiver(
@@ -53,8 +54,10 @@ private class Receiver(
 
     companion object {
         fun intentFilter() = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
-            .apply { addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED) }
-            .apply { addAction(BluetoothDevice.ACTION_FOUND) }
+            .apply {
+                addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+                addAction(BluetoothDevice.ACTION_FOUND)
+            }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -78,14 +81,14 @@ private class Receiver(
             .let { deviceDiscovered.eventOccurred(it) }
     }
 
-            private fun BluetoothDevice.bloothDevice() = BloothDevice(
-                name = name,
-                macAddress = address,
-                type = DeviceType.fromInt(type),
-                majorClass = BluetoothMajorClass.fromInt(bluetoothClass.majorDeviceClass),
-                minorClass = BluetoothMinorClass.fromInt(bluetoothClass.deviceClass),
-                services = BluetoothServiceClass.getAvailableServices(bluetoothClass)
-            )
+    private fun BluetoothDevice.bloothDevice() = BloothDevice(
+        name = name,
+        macAddress = address,
+        type = DeviceType.fromInt(type),
+        majorClass = BluetoothMajorClass.fromInt(bluetoothClass.majorDeviceClass),
+        minorClass = BluetoothMinorClass.fromInt(bluetoothClass.deviceClass),
+        services = BluetoothServiceClass.getAvailableServices(bluetoothClass)
+    )
 
     private fun Intent.bluetoothDevice(): BluetoothDevice =
         getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)

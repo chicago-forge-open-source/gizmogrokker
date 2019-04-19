@@ -53,10 +53,9 @@ class DeviceListActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.device_list_activity)
+
         job = Job()
-
         viewModel = ViewModelProviders.of(this).get(DeviceListViewModel::class.java)
-
         updateViewState()
     }
 

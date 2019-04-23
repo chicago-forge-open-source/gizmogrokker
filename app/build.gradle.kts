@@ -45,6 +45,9 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.1.0-alpha03")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.0.0")
     implementation("androidx.lifecycle:lifecycle-extensions:2.0.0")
+    implementation("com.beepiz.blegattcoroutines:blegattcoroutines-core:0.3.0")
+    implementation("com.beepiz.blegattcoroutines:blegattcoroutines-genericaccess:0.3.0")
+    implementation("com.louiscad.splitties:splitties-bitflags:+")
 
     debugImplementation("androidx.fragment:fragment-testing:1.1.0-alpha05")
     debugImplementation("androidx.test:runner:1.1.2-alpha02")

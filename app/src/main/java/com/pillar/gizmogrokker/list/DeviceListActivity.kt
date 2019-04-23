@@ -121,7 +121,10 @@ class DeviceListActivity : AppCompatActivity() {
             REQUEST_BLUETOOTH_PERMISSIONS -> {
                 when (grantResults[0]) {
                     PackageManager.PERMISSION_GRANTED -> permissionGranted()
-                    else -> println("grant results ${grantResults[0]}")
+                    else -> {
+                        viewModel.isScanning = false
+                        println("grant results ${grantResults[0]}")
+                    }
                 }
             }
         }

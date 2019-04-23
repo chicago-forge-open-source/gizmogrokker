@@ -1,11 +1,11 @@
 package com.pillar.gizmogrokker.detail
 
-import android.app.NotificationManager
 import android.app.Service
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothHeadset
 import android.bluetooth.BluetoothHeadset.*
 import android.bluetooth.BluetoothProfile
+import android.bluetooth.BluetoothProfile.ServiceListener
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -15,19 +15,14 @@ import android.os.IBinder
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
 import androidx.fragment.app.Fragment
 import com.pillar.gizmogrokker.BloothDevice
 import com.pillar.gizmogrokker.R
 import kotlinx.android.synthetic.main.device_detail_fragment.*
 import kotlinx.android.synthetic.main.device_detail_fragment.view.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import java.io.Serializable
 
 
@@ -35,30 +30,20 @@ class DeviceDetailFragment : Fragment() {
     private val unknown = "Unknown"
     private val device: BloothDevice? get() = arguments?.serializable("device")
 
-    private lateinit var job: Job
-    private val mainScope get() = CoroutineScope(Dispatchers.Main + job)
-
-    private lateinit var adapter: BluetoothAdapter
-    private lateinit var recognizer: SpeechRecognizer
+    private val serviceIntent get() = Intent(context, HeadsetService::class.java)
 
     private val speech: RecognitionListener = object : RecognitionListener {
-        override fun onReadyForSpeech(params: Bundle?) {
-            println("READY FOR SPEECH")
-        }
-
         override fun onRmsChanged(rmsdB: Float) {}
 
         override fun onBufferReceived(buffer: ByteArray?) {}
 
-        override fun onBeginningOfSpeech() {
-            println("BEGINNING OF SPEECH")
-        }
-
         override fun onEvent(eventType: Int, params: Bundle?) {}
 
-        override fun onEndOfSpeech() {
-            println("END OF SPEECH")
-        }
+        override fun onReadyForSpeech(params: Bundle?) {}
+
+        override fun onBeginningOfSpeech() {}
+
+        override fun onEndOfSpeech() {}
 
         override fun onError(error: Int) {
             println("ERROR $error")
@@ -77,27 +62,24 @@ class DeviceDetailFragment : Fragment() {
                 ?: arrayListOf("No results")
 
             println(text)
+
+            val intent = serviceIntent.apply { action = HeadsetService.ACTION_STOP_VOICE }
+            context?.startService(intent)
         }
     }
 
-    private val mAudioReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val currentState = intent.getIntExtra(EXTRA_STATE, -1);
-            if (STATE_AUDIO_CONNECTED == currentState) {
-                val sweetIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-                    putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE,"voice.recognition.test");
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,5);
-                }
+    private val recognizer
+        get() = SpeechRecognizer.createSpeechRecognizer(context).apply {
+            setRecognitionListener(speech)
+        }
 
-                recognizer.startListening(sweetIntent);
+    private val receiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.getIntExtra(EXTRA_STATE, -1)) {
+                STATE_AUDIO_CONNECTED -> startSpeechRecognition()
+                else -> println("AUDIO NOT CONNECTED")
             }
         }
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        job = Job()
     }
 
     override fun onCreateView(
@@ -108,45 +90,27 @@ class DeviceDetailFragment : Fragment() {
 
     override fun onStart() {
         super.onStart()
-        adapter = BluetoothAdapter.getDefaultAdapter()
-
-
-        recognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
-            setRecognitionListener(speech)
-        }
-
-        val intent = Intent(context, HeadsetService::class.java)
-        context?.startService(intent)
-
-        connect_device.setOnClickListener {
-            println("CLICKO")
-
-            val startVoice = Intent(context, HeadsetService::class.java).apply {
-                action = HeadsetService.ACTION_STARTVOICE
-            }
-            context?.startService(startVoice)
-
-//            val stopVoice = Intent(context, HeadsetService::class.java).apply {
-//                intent.action = HeadsetService.ACTION_STOPVOICE
-//            }
-//
-//            context?.startService(stopVoice)
-//            context?.stopService(intent)
-
-        }
+        context?.registerReceiver(receiver, IntentFilter(ACTION_AUDIO_STATE_CHANGED))
+        context?.startService(serviceIntent)
+        connect_device.setOnClickListener { startVoice() }
     }
 
-    override fun onResume() {
-        super.onResume()
-        context?.registerReceiver(
-            mAudioReceiver,
-            IntentFilter(ACTION_AUDIO_STATE_CHANGED)
-        );
+    private fun startVoice() {
+        val startVoice = serviceIntent.apply { action = HeadsetService.ACTION_START_VOICE }
+        context?.startService(startVoice)
     }
 
-    override fun onPause() {
-        super.onPause()
-        context?.unregisterReceiver(mAudioReceiver)
+    private fun startSpeechRecognition() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(
+                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+            )
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, "com.pillar.gizmogrokker");
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5);
+        }
+
+        recognizer.startListening(intent)
     }
 
     private fun View.updateUIElements() = device?.apply {
@@ -168,8 +132,8 @@ class DeviceDetailFragment : Fragment() {
 
     override fun onDestroy() {
         super.onDestroy()
-        job.cancel()
-        context?.unregisterReceiver(mAudioReceiver)
+        context?.unregisterReceiver(receiver)
+        context?.stopService(serviceIntent)
     }
 
 }
@@ -180,69 +144,47 @@ private fun <T : Serializable> Bundle.serializable(s: String) = getSerializable(
 
 class HeadsetService : Service() {
 
-    lateinit var mBluetoothAdapter: BluetoothAdapter
-    internal var mBluetoothHeadset: BluetoothHeadset? = null
+    private lateinit var adapter: BluetoothAdapter
+    private lateinit var headset: BluetoothHeadset
 
-    lateinit var mNotificationManager: NotificationManager
-
-    private val mProfileListener = object : BluetoothProfile.ServiceListener {
+    private val listener = object : ServiceListener {
         override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
-            if (profile == BluetoothProfile.HEADSET) {
-                Log.d(TAG, "Connecting HeadsetService...")
-                mBluetoothHeadset = proxy as BluetoothHeadset
-            }
+            headset = proxy as BluetoothHeadset
         }
 
-        override fun onServiceDisconnected(profile: Int) {
-            if (profile == BluetoothProfile.HEADSET) {
-                Log.d(TAG, "Unexpected Disconnect of HeadsetService...")
-                mBluetoothHeadset = null
-            }
-        }
+        override fun onServiceDisconnected(profile: Int) {}
     }
 
-    private val mProfileReceiver = object : BroadcastReceiver() {
+    private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            val action = intent.action
-            if (ACTION_AUDIO_STATE_CHANGED == action) {
-                notifyAudioState(intent)
-            }
-            if (ACTION_CONNECTION_STATE_CHANGED == action) {
-                notifyConnectState(intent)
-            }
-            if (ACTION_VENDOR_SPECIFIC_HEADSET_EVENT == action) {
-                notifyATEvent(intent)
+            when (intent.action) {
+                ACTION_AUDIO_STATE_CHANGED -> notifyAudioState(intent)
+                ACTION_CONNECTION_STATE_CHANGED -> notifyConnectState(intent)
+                ACTION_VENDOR_SPECIFIC_HEADSET_EVENT -> notifyATEvent(intent)
+                else -> println("WHAT?!")
             }
         }
     }
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "Creating HeadsetService...")
+        adapter = BluetoothAdapter.getDefaultAdapter().apply {
+            getProfileProxy(this@HeadsetService, listener, BluetoothProfile.HEADSET)
+        }
 
-        mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
-        mNotificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        val filter = IntentFilter(ACTION_AUDIO_STATE_CHANGED).apply {
+            addAction(ACTION_CONNECTION_STATE_CHANGED)
+            addAction(ACTION_VENDOR_SPECIFIC_HEADSET_EVENT)
+        }
 
-        // Establish connection to the proxy.
-        mBluetoothAdapter.getProfileProxy(this, mProfileListener, BluetoothProfile.HEADSET)
-
-        //Monitor profile events
-        val filter = IntentFilter()
-        filter.addAction(ACTION_AUDIO_STATE_CHANGED)
-        filter.addAction(ACTION_CONNECTION_STATE_CHANGED)
-        filter.addAction(ACTION_VENDOR_SPECIFIC_HEADSET_EVENT)
-        registerReceiver(mProfileReceiver, filter)
-
-        buildNotification("Service Started...")
+        registerReceiver(receiver, filter)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent == null) return START_STICKY
-
-        if (ACTION_STARTVOICE == intent.action) {
-            startVoice()
-        } else if (ACTION_STOPVOICE == intent.action) {
-            stopVoice()
+        when (intent?.action) {
+            ACTION_START_VOICE -> startVoice()
+            ACTION_STOP_VOICE -> stopVoice()
+            else -> println("WHAT DO?!")
         }
 
         return START_STICKY
@@ -250,101 +192,63 @@ class HeadsetService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        Log.d(TAG, "Destroying HeadsetService...")
-        mBluetoothAdapter.closeProfileProxy(BluetoothProfile.HEADSET, mBluetoothHeadset)
-
-        unregisterReceiver(mProfileReceiver)
-        mNotificationManager.cancel(NOTE_ID)
+        adapter.closeProfileProxy(BluetoothProfile.HEADSET, headset)
+        unregisterReceiver(receiver)
     }
 
-    fun startVoice(): Boolean {
-        if (mBluetoothHeadset == null || mBluetoothHeadset!!.connectedDevices.isEmpty()) {
-            //No valid connection to initiate
-            Toast.makeText(this, "Failed to Start Voice Recognition", Toast.LENGTH_SHORT).show()
-            return false
-        }
-
-        val device = mBluetoothHeadset!!.connectedDevices[0]
-        mBluetoothHeadset!!.startVoiceRecognition(device)
-        println("START VOICE")
-        return true
+    private fun startVoice() {
+        val device = headset.connectedDevices[0]
+        headset.startVoiceRecognition(device)
     }
 
-    fun stopVoice(): Boolean {
-        if (mBluetoothHeadset == null || mBluetoothHeadset!!.connectedDevices.isEmpty()) {
-            //No valid connection to initiate
-            Toast.makeText(this, "Failed to Stop Voice Recognition", Toast.LENGTH_SHORT).show()
-            return false
-        }
-
-        val device = mBluetoothHeadset!!.connectedDevices[0]
-        mBluetoothHeadset!!.stopVoiceRecognition(device)
-        return true
-    }
-
-    private fun buildNotification(text: String) {
-        println("NOTIFICATION $text")
+    private fun stopVoice() {
+        val device = headset.connectedDevices[0]
+        headset.stopVoiceRecognition(device)
     }
 
     private fun notifyAudioState(intent: Intent) {
-        val state = intent.getIntExtra(EXTRA_STATE, -1)
-        val message: String
-        when (state) {
-            STATE_AUDIO_CONNECTED -> message = "Audio Connected"
-            STATE_AUDIO_CONNECTING -> message = "Audio Connecting"
-            STATE_AUDIO_DISCONNECTED -> message = "Audio Disconnected"
-            else -> message = "Audio Unknown"
+        val message = when (intent.getIntExtra(EXTRA_STATE, -1)) {
+            STATE_AUDIO_CONNECTED -> "AUDIO CONNECTED"
+            STATE_AUDIO_CONNECTING -> "AUDIO CONNECTING"
+            STATE_AUDIO_DISCONNECTED -> "AUDIO DISCONNECTED"
+            else -> "AUDIO UNKNOWN??"
         }
 
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
-        buildNotification(message)
-
+        println(message)
     }
 
     private fun notifyConnectState(intent: Intent) {
-        val state = intent.getIntExtra(EXTRA_STATE, -1)
-        val message: String
-        when (state) {
-            STATE_CONNECTED -> message = "Connected"
-            STATE_CONNECTING -> message = "Connecting"
-            STATE_DISCONNECTING -> message = "Disconnecting"
-            STATE_DISCONNECTED -> message = "Disconnected"
-            else -> message = "Connect Unknown"
+        val message = when (intent.getIntExtra(EXTRA_STATE, -1)) {
+            STATE_CONNECTED -> "Connected"
+            STATE_CONNECTING -> "Connecting"
+            STATE_DISCONNECTING -> "Disconnecting"
+            STATE_DISCONNECTED -> "Disconnected"
+            else -> "Connect Unknown"
         }
 
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
-        buildNotification(message)
+        println(message)
     }
 
     private fun notifyATEvent(intent: Intent) {
-        val command =
-            intent.getStringExtra(EXTRA_VENDOR_SPECIFIC_HEADSET_EVENT_CMD)
-        val type =
-            intent.getIntExtra(EXTRA_VENDOR_SPECIFIC_HEADSET_EVENT_CMD_TYPE, -1)
+        val command = intent.getStringExtra(EXTRA_VENDOR_SPECIFIC_HEADSET_EVENT_CMD)
 
-        val typeString: String
-        typeString = when (type) {
-            AT_CMD_TYPE_ACTION -> "AT Action"
-            AT_CMD_TYPE_READ -> "AT Read"
-            AT_CMD_TYPE_TEST -> "AT Test"
-            AT_CMD_TYPE_SET -> "AT Set"
-            AT_CMD_TYPE_BASIC -> "AT Basic"
-            else -> "AT Unknown"
-        }
+        val typeString =
+            when (intent.getIntExtra(EXTRA_VENDOR_SPECIFIC_HEADSET_EVENT_CMD_TYPE, -1)) {
+                AT_CMD_TYPE_ACTION -> "AT Action"
+                AT_CMD_TYPE_READ -> "AT Read"
+                AT_CMD_TYPE_TEST -> "AT Test"
+                AT_CMD_TYPE_SET -> "AT Set"
+                AT_CMD_TYPE_BASIC -> "AT Basic"
+                else -> "AT Unknown"
+            }
 
-        Toast.makeText(this, "$typeString: $command", Toast.LENGTH_SHORT).show()
-        buildNotification("$typeString: $command")
+        println("$typeString: $command")
     }
 
-    override fun onBind(intent: Intent): IBinder? {
-        return null
-    }
+    override fun onBind(intent: Intent): IBinder? = null
 
     companion object {
-        private val TAG = "BluetoothProxyMonitorService"
-        private val NOTE_ID = 1000
-
-        val ACTION_STARTVOICE = "com.pillar.gizmogrokker.action.STARTVOICE"
-        val ACTION_STOPVOICE = "com.pillar.gizmogrokker.action.STOPVOICE"
+        const val ACTION_START_VOICE = "com.pillar.gizmogrokker.action.START_VOICE"
+        const val ACTION_STOP_VOICE = "com.pillar.gizmogrokker.action.STOP_VOICE"
     }
 }

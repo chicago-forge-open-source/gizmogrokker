@@ -30,8 +30,8 @@ interface BluetoothInterface {
     fun startDiscovery() {
         if (adapter?.isDiscovering == true) {
             adapter?.cancelDiscovery()
-
         }
+
         adapter?.startDiscovery()
 
         context.registerReceiver(
